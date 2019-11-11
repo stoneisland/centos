@@ -1,0 +1,76 @@
+{
+    "builders": [
+        {
+            "type": "vmware-iso",
+            "vm_name": "{{user `vm_name`}}",
+            "iso_url": "{{user `iso_file`}}",
+            "iso_checksum": "{{user `iso_checksum`}}",
+            "iso_checksum_type": "{{user `type`}}",
+            "headless": "{{user `non_gui`}}",
+            "boot_wait": "10s",
+            "guest_os_type": "otherlinux-64",
+            "disk_size": "{{user `disk_size`}}",
+            "output_directory": "output-vmware-iso",
+            "http_directory": "http",
+            "boot_command": [
+                "<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg<enter>"
+            ],
+            "memory": "{{user `memsize`}}",
+            "ssh_username": "{{user `ssh_username`}}",
+            "ssh_password": "{{user `ssh_password`}}",
+            "ssh_wait_timeout": "40m",
+            "shutdown_command": "echo '{{user `ssh_password`}}' | sudo -S shutdown -P now"
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "execute_command": "echo '{{user `ssh_password`}}' | sudo -S sh -c '{{ .Vars }} {{ .Path }}'",
+            "inline": [
+                "yum -y --enablerepo=extras install epel-release",
+                "yum -y install open-vm-tools {{user `additional_packages`}}",
+                "yum -y install java-1.8.0-openjdk",
+                "yum -y install wget",
+                "yum -y install unzip",
+                "yum -y install avahi",
+                "systemctl disable firewalld",
+                "systemctl stop firewalld",
+                "hostnamectl set-hostname {{user `hostname`}}",
+                "echo \"127.0.0.1  $(hostname)\" >> /etc/hosts",
+                "groupadd payara",
+                "useradd -g payara -s /bin/bash -d {{user `payara_home`}} -m payara",
+                "echo 'payara:{{user `payara_password`}}' | chpasswd",
+                "wget https://repo1.maven.org/maven2/fish/payara/distributions/payara/{{user `payara_ver`}}/payara-{{user `payara_ver`}}.zip",
+                "unzip payara-{{user `payara_ver`}}.zip -d {{user `payara_home`}}",
+                "{{user `payara_home`}}/payara5/bin/asadmin create-service --serviceuser payara production",
+                "echo 'AS_ADMIN_PASSWORD=' > old_passwordfile.txt",
+                "echo 'AS_ADMIN_NEWPASSWORD={{user `payara_admin_password`}}' >> old_passwordfile.txt",
+                "echo 'AS_ADMIN_PASSWORD={{user `payara_admin_password`}}' > passwordfile.txt",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile old_passwordfile.txt change-admin-password --domain_name production",
+                "{{user `payara_home`}}/payara5/bin/asadmin start-domain production",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt enable-secure-admin",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt delete-jvm-options -Xms2g:-Xmx2g",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt create-jvm-options -Xms{{user `Xms`}}:-Xmx{{user `Xmx`}}:-server",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt set-log-attributes com.sun.enterprise.server.logging.GFFileHandler.maxHistoryFiles='100'",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt set configs.config.server-config.network-config.transports.transport.tcp.acceptor-threads=-1 configs.config.server-config.network-config.transports.transport.tcp.byte-buffer-type=HEAP",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt set configs.config.server-config.thread-pools.thread-pool.http-thread-pool.min-thread-pool-size=25 configs.config.server-config.thread-pools.thread-pool.http-thread-pool.max-thread-pool-size=350",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt delete-domain domain1",
+                "wget {{user `war_url`}} -O package.war",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt deploy --name {{user `appName`}} --contextroot {{user `contextroot`}} package.war",
+                "rm package.war",
+                "{{user `payara_home`}}/payara5/bin/asadmin --user admin --passwordfile passwordfile.txt stop-domain production",
+                "rm *passwordfile* payara-*.zip",
+                "chown -R payara.payara {{user `payara_home`}}/payara5"
+            ]
+        }
+    ],
+    "post-processors": [
+        {
+            "inline": [
+                "rm -f {{user `vm_name`}}.ova",
+                "/usr/lib/vmware-ovftool/ovftool --shaAlgorithm=SHA1 output-vmware-iso/{{user `vm_name`}}.vmx {{user `vm_name`}}.ova"
+            ],
+            "type": "shell-local"
+        }
+    ]
+}
