@@ -1,4 +1,4 @@
-# Build virtual machine for payara
+# Build virtual machine based on centos
 
 To build a vmware virtual machine based on centos go into directory centos/vmware,
 write vars.json file and give the command:
@@ -16,7 +16,3 @@ PACKER_LOG=1; PACKER_LOG_PATH="packerlog.txt"; packer build --force -var-file va
 if you need a log file.
 
 There is an example var file in the same directory.
-
-TODO
-
-Start payara using systemd
