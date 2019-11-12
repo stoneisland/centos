@@ -8,5 +8,5 @@
     "vm_name": "centos-1.0.0",
     "hostname": "centos",
     "disk_size": "32768",
-    "memory": "1024"
+    "memsize": "1024"
 }
